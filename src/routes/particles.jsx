@@ -76,6 +76,12 @@ export default function ParticlesScreen() {
     //   canvasElem.removeEventListener("mousemove", handleCanvasMouseMove);
     // });
 
+    const point = {
+      x: 0,
+      y: 0,
+    };
+    let degree = 0;
+
     /** @type {number|undefined} */
     let animateId;
     const animate = () => {
@@ -83,12 +89,26 @@ export default function ParticlesScreen() {
       ctx.fillStyle = "rgba(0,0,0,0.05)"; // small alpha for trails
       ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
 
-      atoms.push(
-        createAtom(
-          Math.random() * canvasElem.width,
-          Math.random() * canvasElem.height
-        )
+      // point.x = Math.sin(degree / 180) * Math.PI;
+      // point.y = Math.cos(point.x) * Math.cos(point.x);
+      // const newAtom = createAtom(
+      //   canvasElem.width * 0.5 + point.x * (canvasElem.width * 0.15),
+      //   canvasElem.height * 0.25 + point.y * (canvasElem.height * 0.025)
+      // );
+
+      // Infinity (lemniscate) path parametric equations
+      // x = cos(t), y = sin(t) * cos(t)
+      const t = degree * (Math.PI / 180);
+      point.x = Math.cos(t);
+      point.y = Math.sin(t) * Math.cos(t);
+      const newAtom = createAtom(
+        canvasElem.width * 0.5 + point.x * (canvasElem.width * 0.25),
+        canvasElem.height * 0.5 + point.y * (canvasElem.height * 0.25)
       );
+
+      degree += 4;
+
+      atoms.push(newAtom);
 
       const atomsIndexesToCleanup = [];
       for (let i = 0; i < atoms.length; i++) {
