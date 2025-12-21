@@ -7,19 +7,28 @@ export default function ParticlesScreen() {
   /** @type {Particle[]} */
   let atoms = [];
 
-
   /**
-   * @param {number} x 
-   * @param {number} y 
+   * @param {number} x
+   * @param {number} y
    * @returns {Particle}
    */
   function createAtom(x, y) {
+    const randRadiusBaseDecider = Math.random();
     return {
-      x, y,
-      radius: Math.random() * 8 + 2,
-      speedX: Math.random() * 4 - 2, //-2 +2
-      speedY: Math.random() * 4 - 2, //-2 +2
-    }
+      x,
+      y,
+      radius:
+        randRadiusBaseDecider * 8 +
+        (randRadiusBaseDecider < 0.3
+          ? 2
+          : randRadiusBaseDecider < 0.6
+          ? 4
+          : randRadiusBaseDecider < 0.99
+          ? 6
+          : 18), // 2~10, 4~14, 6~16, 18~26
+      speedX: Math.random() * 6 - 2, //-2 +2
+      speedY: Math.random() * 6 - 2, //-2 +2
+    };
   }
 
   /** @param {Particle} atom */
@@ -30,49 +39,57 @@ export default function ParticlesScreen() {
 
   /** @param {Particle} atom */
   function updateAtomSize(atom) {
-    atom.radius -= 0.2;
+    atom.radius -= 0.1;
   }
 
   /**
-   * @param {Particle} atom 
-   * @param {CanvasRenderingContext2D} ctx 
+   * @param {Particle} atom
+   * @param {CanvasRenderingContext2D} ctx
    */
   function drawAtom(atom, ctx) {
     ctx.beginPath();
+    ctx.fillStyle = "white";
     ctx.arc(atom.x, atom.y, atom.radius, 0, Math.PI * 2);
     ctx.fill();
   }
 
-
-
   createEffect(() => {
-    console.log("___ canvasElem", canvasElem);
     if (!(canvasElem instanceof HTMLCanvasElement)) return;
 
-    const ctx = canvasElem.getContext('2d');
+    const ctx = canvasElem.getContext("2d");
     if (!ctx) return;
 
     canvasElem.width = window.innerWidth;
     canvasElem.height = window.innerHeight;
 
-    /** @param {MouseEvent} e  */
-    function handleCanvasMouseMove(e) {
-      if (atoms.length >= 50_000) return;
+    // /** @param {MouseEvent} e  */
+    // function handleCanvasMouseMove(e) {
+    //   if (atoms.length >= 50_000) return;
 
-      for (let i = 0; i < 50; i++) {
-        atoms.push(createAtom(e.x, e.y));
-      }
-    }
+    //   for (let i = 0; i < 50; i++) {
+    //     atoms.push(createAtom(e.x, e.y));
+    //   }
+    // }
 
-    canvasElem.addEventListener('mousemove', handleCanvasMouseMove);
-    onCleanup(() => {
-      canvasElem.removeEventListener('mousemove', handleCanvasMouseMove);
-    })
-
+    // canvasElem.addEventListener("mousemove", handleCanvasMouseMove);
+    // onCleanup(() => {
+    //   canvasElem.removeEventListener("mousemove", handleCanvasMouseMove);
+    // });
 
     /** @type {number|undefined} */
     let animateId;
     const animate = () => {
+      // ctx.fillStyle = "black";
+      ctx.fillStyle = "rgba(0,0,0,0.05)"; // small alpha for trails
+      ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
+
+      atoms.push(
+        createAtom(
+          Math.random() * canvasElem.width,
+          Math.random() * canvasElem.height
+        )
+      );
+
       const atomsIndexesToCleanup = [];
       for (let i = 0; i < atoms.length; i++) {
         const atom = atoms[i];
@@ -84,7 +101,7 @@ export default function ParticlesScreen() {
           // atoms.splice(i, 1);
           atomsIndexesToCleanup.push(i);
         }
-      };
+      }
 
       for (let i = atomsIndexesToCleanup.length - 1; i > -1; i--) {
         const index = atomsIndexesToCleanup[i];
@@ -92,21 +109,18 @@ export default function ParticlesScreen() {
         atoms.pop();
       }
 
-      ctx.save();
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
-      ctx.restore();
       animateId = requestAnimationFrame(animate);
-    }
+    };
 
     onCleanup(() => {
-      if (typeof animateId !== 'number') return;
+      if (typeof animateId !== "number") return;
 
       cancelAnimationFrame(animateId);
-    })
+    });
     animate();
-
   });
 
-  return <canvas id="my-canvas" ref={canvasElem} class="w-full h-full grow"></canvas>;
+  return (
+    <canvas id="my-canvas" ref={canvasElem} class="w-full h-full grow"></canvas>
+  );
 }
