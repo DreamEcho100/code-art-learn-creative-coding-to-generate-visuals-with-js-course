@@ -1,4 +1,4 @@
-import { useLocation } from "@solidjs/router";
+import { A, useLocation } from "@solidjs/router";
 import { For } from "solid-js";
 
 export default function Nav() {
@@ -29,7 +29,9 @@ export default function Nav() {
         <For each={navItems}>
           {(item) => (
             <li class={`border-b-2 ${active(item.href)} mx-1.5 sm:mx-6`}>
-              <a href={item.href}>{item.title}</a>
+              <A href={item.href} rel="noopener">
+                {item.title}
+              </A>
             </li>
           )}
         </For>

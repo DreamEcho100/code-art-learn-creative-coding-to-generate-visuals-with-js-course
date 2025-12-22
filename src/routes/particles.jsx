@@ -10,22 +10,24 @@ export default function ParticlesScreen() {
   /**
    * @param {number} x
    * @param {number} y
+   * @param {number} [radius]
    * @returns {Particle}
    */
-  function createAtom(x, y) {
+  function createAtom(x, y, radius) {
     const randRadiusBaseDecider = Math.random();
     return {
       x,
       y,
       radius:
+        radius ??
         randRadiusBaseDecider * 8 +
-        (randRadiusBaseDecider < 0.3
-          ? 2
-          : randRadiusBaseDecider < 0.6
-          ? 4
-          : randRadiusBaseDecider < 0.99
-          ? 6
-          : 18), // 2~10, 4~14, 6~16, 18~26
+          (randRadiusBaseDecider < 0.3
+            ? 2
+            : randRadiusBaseDecider < 0.6
+            ? 4
+            : randRadiusBaseDecider < 0.99
+            ? 6
+            : 18), // 2~10, 4~14, 6~16, 18~26
       speedX: Math.random() * 6 - 2, //-2 +2
       speedY: Math.random() * 6 - 2, //-2 +2
     };
@@ -45,10 +47,11 @@ export default function ParticlesScreen() {
   /**
    * @param {Particle} atom
    * @param {CanvasRenderingContext2D} ctx
+   * @param {string} [color]
    */
-  function drawAtom(atom, ctx) {
+  function drawAtom(atom, ctx, color) {
     ctx.beginPath();
-    ctx.fillStyle = "white";
+    ctx.fillStyle = color ?? "white";
     ctx.arc(atom.x, atom.y, atom.radius, 0, Math.PI * 2);
     ctx.fill();
   }
@@ -59,8 +62,90 @@ export default function ParticlesScreen() {
     const ctx = canvasElem.getContext("2d");
     if (!ctx) return;
 
-    canvasElem.width = window.innerWidth;
-    canvasElem.height = window.innerHeight;
+    const initRect = canvasElem.getBoundingClientRect();
+    /**
+     * @type {{
+     *    rect: {
+     *      top: number;
+     *      left: number;
+     *      width: number;
+     *      height: number;
+     *      bottom: number;
+     *      right: number;
+     *      x: number;
+     *      y: number;
+     *    };
+     *    scale: {
+     *      x: number;
+     *      y: number;
+     *    };
+     *}}
+     */
+    const canvasConfig = {
+      rect: {
+        top: initRect.top,
+        left: initRect.left,
+        width: initRect.width,
+        height: initRect.height,
+        bottom: initRect.bottom,
+        right: initRect.right,
+        x: initRect.x,
+        y: initRect.y,
+      },
+      scale: {
+        x: initRect.width / canvasElem.width,
+        y: initRect.height / canvasElem.height,
+      },
+    };
+
+    // let dpr = window.devicePixelRatio || 1;
+
+    // console.log("___ dpr", dpr);
+
+    canvasElem.width = canvasConfig.rect.width;
+    canvasElem.height = canvasConfig.rect.height;
+
+    // canvasElem.width = canvasConfig.rect.width * dpr;
+    // canvasElem.height = canvasConfig.rect.height * dpr;
+
+    // ctx.scale(dpr, dpr);
+
+    // Debounce resize to avoid ResizeObserver loop errors
+    /** @type {number} */
+    let resizeTimeout;
+    const resizeCanvas = () => {
+      const rect = canvasElem.getBoundingClientRect();
+
+      canvasConfig.rect.top = rect.top;
+      canvasConfig.rect.left = rect.left;
+      canvasConfig.rect.width = rect.width;
+      canvasConfig.rect.height = rect.height;
+      canvasConfig.rect.bottom = rect.bottom;
+      canvasConfig.rect.right = rect.right;
+      canvasConfig.rect.x = rect.x;
+      canvasConfig.rect.y = rect.y;
+
+      // dpr = window.devicePixelRatio || 1;
+
+      canvasElem.width = canvasConfig.rect.width; // * dpr;
+      canvasElem.height = canvasConfig.rect.height; // * dpr;
+
+      canvasConfig.scale.x = canvasElem.width / canvasConfig.rect.width;
+      canvasConfig.scale.y = canvasElem.height / canvasConfig.rect.height;
+
+      // ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const debouncedResizeCanvas = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(resizeCanvas, 50);
+    };
+
+    // const canvasResizeObserver = new ResizeObserver(debouncedResizeCanvas);
+    // canvasResizeObserver.observe(canvasElem);
+    // onCleanup(() => {
+    //   canvasResizeObserver.disconnect();
+    //   clearTimeout(resizeTimeout);
+    // });
 
     // /** @param {MouseEvent} e  */
     // function handleCanvasMouseMove(e) {
@@ -137,7 +222,93 @@ export default function ParticlesScreen() {
 
       cancelAnimationFrame(animateId);
     });
-    animate();
+    // animate();
+
+    // sierpinski triangle
+    /**
+     * @param {Particle} prevAtom
+     * @param {number} atomsCount
+     * @param {number} atomRadius
+     */
+    const drawSierpinskiTriangleSetup = (prevAtom, atomsCount, atomRadius) => {
+      const topCenterAtom = createAtom(canvasElem.width / 2, 50, atomRadius);
+      const leftBottomAtom = createAtom(50, canvasElem.height - 50, atomRadius);
+      const rightBottomAtom = createAtom(
+        canvasElem.width - 50,
+        canvasElem.height - 50,
+        atomRadius
+      );
+      const triangleCorners = /** @type {const} */ ([
+        topCenterAtom,
+        leftBottomAtom,
+        rightBottomAtom,
+      ]);
+
+      for (const atom of triangleCorners) {
+        drawAtom(atom, ctx);
+      }
+      /** @type {Particle} */
+      let randomAtomCornor;
+      /** @type {Particle} */
+      let middleAtom;
+
+      for (let i = 0; i < atomsCount; i++) {
+        randomAtomCornor =
+          triangleCorners[Math.floor(Math.random() * triangleCorners.length)];
+
+        middleAtom = createAtom(
+          (prevAtom.x + randomAtomCornor.x) * 0.5,
+          (prevAtom.y + randomAtomCornor.y) * 0.5,
+          atomRadius
+        );
+        drawAtom(middleAtom, ctx);
+        prevAtom = middleAtom;
+      }
+    };
+
+    /** @param {PointerEvent} event */
+    const handleDrawSierpinskiTriangle = (event) => {
+      resizeCanvas();
+      ctx.fillStyle = "rgba(0,0,0)";
+      ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
+
+      // PROPLEM: Will, it's like still a few pixels different on the x and y
+      const firstAtomRadius = 20;
+      const x = (event.clientX - canvasConfig.rect.left) * canvasConfig.scale.x;
+      const y = (event.clientY - canvasConfig.rect.top) * canvasConfig.scale.y;
+      const firstAtom = createAtom(x, y, firstAtomRadius);
+      drawAtom(firstAtom, ctx);
+
+      // Draw red center dot at the SAME coordinates (x, y)
+      const firstAtomRadiusCenter = firstAtomRadius * 0.1;
+      const centerAtom = createAtom(x, y, firstAtomRadiusCenter);
+      drawAtom(centerAtom, ctx, "red");
+
+      // Draw crosshair for debugging
+      const crosshairPadding = firstAtomRadius * 0.8;
+      ctx.strokeStyle = "lime";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - crosshairPadding, y);
+      ctx.lineTo(x + crosshairPadding, y);
+      ctx.moveTo(x, y - crosshairPadding);
+      ctx.lineTo(x, y + crosshairPadding);
+      ctx.stroke();
+
+      drawSierpinskiTriangleSetup(firstAtom, 100_000, 1);
+    };
+
+    canvasElem.addEventListener("pointerdown", handleDrawSierpinskiTriangle, {
+      capture: false,
+    });
+
+    onCleanup(() => {
+      canvasElem.removeEventListener(
+        "pointerdown",
+        handleDrawSierpinskiTriangle,
+        { capture: false }
+      );
+    });
   });
 
   return (
