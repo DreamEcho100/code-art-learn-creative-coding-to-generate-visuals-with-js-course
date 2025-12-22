@@ -1,11 +1,207 @@
-import { createEffect, onCleanup } from "solid-js";
+import { onCleanup, onMount } from "solid-js";
+
+/**
+ * @param {HTMLElement} elem
+ * @returns {boolean}
+ */
+function isElementHidden(elem) {
+  const style = getComputedStyle(elem);
+  return (
+    document.hidden ||
+    elem.hidden || // html hidden attr
+    style.display === "none" ||
+    style.visibility === "hidden" ||
+    elem.getClientRects().length === 0
+  );
+}
+
+/**
+ * @typedef {{
+ *  isResizePending: boolean;
+ *  intersectionState: "not-intersecting" | "intersecting" | "unknown";
+ *  isHidden: boolean;
+ *  dpr: number;
+ *  rect: {
+ *    top: number;
+ *    left: number;
+ *    width: number;
+ *    height: number;
+ *    bottom: number;
+ *    right: number;
+ *    x: number;
+ *    y: number;
+ *  };
+ * }} CanvasSettings
+ */
+/**
+ * @param {HTMLCanvasElement} canvasElem
+ * @param {{
+ *  IntersectionObserverOptions?: IntersectionObserverInit | undefined
+ *  onCleanup: (fn: () => void) => void;
+ *  handleDprChange?: (dpr: number) => void;
+ *  onVisibilitychange?: (isPaused: boolean) => void;
+ *  onResizeChange?: (entry: ResizeObserverEntry) => void;
+ *  onIntersectionChange?: (entry: IntersectionObserverEntry, isIntersecting: boolean, isHidden: boolean) => void;
+ * }} options
+ */
+function initCanvasSettings(canvasElem, options) {
+  canvasElem.style.setProperty("contain", "layout paint size");
+  const handleVisibilitychange = () => {
+    canvasSettings.isHidden = isElementHidden(canvasElem);
+    options.onVisibilitychange?.(canvasSettings.isHidden);
+  };
+  document.addEventListener("visibilitychange", handleVisibilitychange);
+  canvasElem.addEventListener("visibilitychange", handleVisibilitychange);
+  options.onCleanup(() => {
+    document.removeEventListener("visibilitychange", handleVisibilitychange);
+    canvasElem.removeEventListener("visibilitychange", handleVisibilitychange);
+  });
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      const isIntersecting =
+        !!entry && entry.isIntersecting && entry.intersectionRatio > 0;
+
+      // pause when tab is hidden OR element is not in view
+      canvasSettings.isHidden = isElementHidden(canvasElem);
+      canvasSettings.intersectionState = isIntersecting
+        ? "intersecting"
+        : "not-intersecting";
+
+      options.onIntersectionChange?.(
+        entry,
+        isIntersecting,
+        canvasSettings.isHidden
+      );
+    },
+    {
+      threshold: 0, // 0 -> fires when any pixel enters/exits
+      root: null,
+      rootMargin: "0px", // e.g. "200px" to pause earlier when far offscreen
+      ...options.IntersectionObserverOptions,
+    }
+  );
+
+  io.observe(canvasElem);
+  options.onCleanup(() => io.disconnect());
+
+  const initRect = canvasElem.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvasElem.width = Math.round(initRect.width * dpr);
+  canvasElem.height = Math.round(initRect.height * dpr);
+  options.handleDprChange?.(dpr);
+
+  /** @type {CanvasSettings} */
+  const canvasSettings = {
+    isResizePending: true,
+    intersectionState: "unknown",
+    dpr,
+    isHidden: false,
+    rect: {
+      top: initRect.top,
+      left: initRect.left,
+      width: initRect.width,
+      height: initRect.height,
+      bottom: initRect.bottom,
+      right: initRect.right,
+      x: initRect.x,
+      y: initRect.y,
+    },
+  };
+
+  // Q: Is the following needed?!!
+  // let mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  // const handleDprMediaQueryChange = () => {
+  //   const nextDpr = window.devicePixelRatio || 1;
+  //   canvasSettings.dpr = nextDpr;
+  //   options.handleDprChange?.(nextDpr);
+  //   mq.removeEventListener("change", handleDprMediaQueryChange);
+
+  //   mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  //   mq.addEventListener("change", handleDprMediaQueryChange);
+  //   options.onCleanup(() => {
+  //     mq.removeEventListener("change", handleDprMediaQueryChange);
+  //   });
+  // };
+  // mq.addEventListener("change", handleDprMediaQueryChange);
+  // options.onCleanup(() => {
+  //   mq.removeEventListener("change", handleDprMediaQueryChange);
+  // });
+
+  const canvasResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    if (entry.target !== canvasElem) return;
+    // const offsetLeft = /** @type {HTMLCanvasElement} */ (entry.target)
+    //   .offsetLeft;
+    // const offsetTop = /** @type {HTMLCanvasElement} */ (entry.target).offsetTop;
+    // canvasSettings.rect.top = offsetTop + entry.contentRect.top;
+    // canvasSettings.rect.left = offsetLeft + entry.contentRect.left;
+    // canvasSettings.rect.width = entry.contentRect.width;
+    // canvasSettings.rect.height = entry.contentRect.height;
+    // canvasSettings.rect.bottom = offsetTop + entry.contentRect.bottom;
+    // canvasSettings.rect.right = offsetLeft + entry.contentRect.right;
+    // canvasSettings.rect.x = offsetLeft;
+    // canvasSettings.rect.y = offsetTop;
+
+    canvasSettings.rect.width = entry.contentRect.width;
+    canvasSettings.rect.height = entry.contentRect.height;
+
+    canvasSettings.isResizePending = true;
+
+    options.onResizeChange?.(entry);
+  });
+  canvasResizeObserver.observe(canvasElem);
+  options.onCleanup(() => {
+    canvasResizeObserver.disconnect();
+  });
+
+  const handlePendingResizeCanvas = () => {
+    const rect = canvasElem.getBoundingClientRect();
+    canvasSettings.rect.top = rect.top;
+    canvasSettings.rect.left = rect.left;
+    canvasSettings.rect.right = rect.right;
+    canvasSettings.rect.bottom = rect.bottom;
+    canvasSettings.rect.x = rect.x;
+    canvasSettings.rect.y = rect.y;
+
+    const nextDpr = window.devicePixelRatio || 1;
+
+    const width = Math.round(canvasSettings.rect.width * nextDpr);
+    const height = Math.round(canvasSettings.rect.height * nextDpr);
+
+    if (
+      canvasElem.width === width &&
+      canvasElem.height === height &&
+      canvasSettings.dpr === nextDpr
+    ) {
+      //
+      canvasSettings.isResizePending = false;
+      return;
+    }
+
+    canvasSettings.dpr = nextDpr;
+    canvasElem.width = width;
+    canvasElem.height = height;
+
+    options.handleDprChange?.(nextDpr);
+
+    //
+    canvasSettings.isResizePending = false;
+  };
+
+  return {
+    canvasSettings,
+    handlePendingResizeCanvas,
+  };
+}
 
 export default function ParticlesScreen() {
   /** @type {HTMLCanvasElement|undefined} */
   let canvasElem;
   /** @typedef {{ x: number; y: number; speedX: number; speedY: number; radius: number }} Particle */
   /** @type {Particle[]} */
-  let atoms = [];
+  const atoms = [];
 
   /**
    * @param {number} x
@@ -56,96 +252,23 @@ export default function ParticlesScreen() {
     ctx.fill();
   }
 
-  createEffect(() => {
+  onMount(() => {
     if (!(canvasElem instanceof HTMLCanvasElement)) return;
 
     const ctx = canvasElem.getContext("2d");
     if (!ctx) return;
 
-    const initRect = canvasElem.getBoundingClientRect();
-    /**
-     * @type {{
-     *    rect: {
-     *      top: number;
-     *      left: number;
-     *      width: number;
-     *      height: number;
-     *      bottom: number;
-     *      right: number;
-     *      x: number;
-     *      y: number;
-     *    };
-     *    scale: {
-     *      x: number;
-     *      y: number;
-     *    };
-     *}}
-     */
-    const canvasConfig = {
-      rect: {
-        top: initRect.top,
-        left: initRect.left,
-        width: initRect.width,
-        height: initRect.height,
-        bottom: initRect.bottom,
-        right: initRect.right,
-        x: initRect.x,
-        y: initRect.y,
-      },
-      scale: {
-        x: initRect.width / canvasElem.width,
-        y: initRect.height / canvasElem.height,
-      },
-    };
-
-    // let dpr = window.devicePixelRatio || 1;
-
-    // console.log("___ dpr", dpr);
-
-    canvasElem.width = canvasConfig.rect.width;
-    canvasElem.height = canvasConfig.rect.height;
-
-    // canvasElem.width = canvasConfig.rect.width * dpr;
-    // canvasElem.height = canvasConfig.rect.height * dpr;
-
-    // ctx.scale(dpr, dpr);
-
-    // Debounce resize to avoid ResizeObserver loop errors
-    /** @type {number} */
-    let resizeTimeout;
-    const resizeCanvas = () => {
-      const rect = canvasElem.getBoundingClientRect();
-
-      canvasConfig.rect.top = rect.top;
-      canvasConfig.rect.left = rect.left;
-      canvasConfig.rect.width = rect.width;
-      canvasConfig.rect.height = rect.height;
-      canvasConfig.rect.bottom = rect.bottom;
-      canvasConfig.rect.right = rect.right;
-      canvasConfig.rect.x = rect.x;
-      canvasConfig.rect.y = rect.y;
-
-      // dpr = window.devicePixelRatio || 1;
-
-      canvasElem.width = canvasConfig.rect.width; // * dpr;
-      canvasElem.height = canvasConfig.rect.height; // * dpr;
-
-      canvasConfig.scale.x = canvasElem.width / canvasConfig.rect.width;
-      canvasConfig.scale.y = canvasElem.height / canvasConfig.rect.height;
-
-      // ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    const debouncedResizeCanvas = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(resizeCanvas, 50);
-    };
-
-    // const canvasResizeObserver = new ResizeObserver(debouncedResizeCanvas);
-    // canvasResizeObserver.observe(canvasElem);
-    // onCleanup(() => {
-    //   canvasResizeObserver.disconnect();
-    //   clearTimeout(resizeTimeout);
-    // });
+    const { canvasSettings, handlePendingResizeCanvas } = initCanvasSettings(
+      canvasElem,
+      {
+        onCleanup,
+        handleDprChange: (dpr) => {
+          // ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.scale(dpr, dpr);
+        },
+      }
+    );
 
     // /** @param {MouseEvent} e  */
     // function handleCanvasMouseMove(e) {
@@ -170,15 +293,19 @@ export default function ParticlesScreen() {
     /** @type {number|undefined} */
     let animateId;
     const animate = () => {
+      if (canvasSettings.isResizePending) {
+        handlePendingResizeCanvas();
+      }
+
       // ctx.fillStyle = "black";
       ctx.fillStyle = "rgba(0,0,0,0.05)"; // small alpha for trails
-      ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
+      ctx.fillRect(0, 0, canvasSettings.rect.width, canvasSettings.rect.height);
 
       // point.x = Math.sin(degree / 180) * Math.PI;
       // point.y = Math.cos(point.x) * Math.cos(point.x);
       // const newAtom = createAtom(
-      //   canvasElem.width * 0.5 + point.x * (canvasElem.width * 0.15),
-      //   canvasElem.height * 0.25 + point.y * (canvasElem.height * 0.025)
+      //   canvasSettings.rect.width * 0.5 + point.x * (canvasSettings.rect.width * 0.15),
+      //   canvasSettings.rect.height * 0.25 + point.y * (canvasSettings.rect.height * 0.025)
       // );
 
       // Infinity (lemniscate) path parametric equations
@@ -187,8 +314,10 @@ export default function ParticlesScreen() {
       point.x = Math.cos(t);
       point.y = Math.sin(t) * Math.cos(t);
       const newAtom = createAtom(
-        canvasElem.width * 0.5 + point.x * (canvasElem.width * 0.25),
-        canvasElem.height * 0.5 + point.y * (canvasElem.height * 0.25)
+        canvasSettings.rect.width * 0.5 +
+          point.x * (canvasSettings.rect.width * 0.25),
+        canvasSettings.rect.height * 0.5 +
+          point.y * (canvasSettings.rect.height * 0.25)
       );
 
       degree += 4;
@@ -218,9 +347,7 @@ export default function ParticlesScreen() {
     };
 
     onCleanup(() => {
-      if (typeof animateId !== "number") return;
-
-      cancelAnimationFrame(animateId);
+      if (typeof animateId === "number") cancelAnimationFrame(animateId);
     });
     // animate();
 
@@ -231,11 +358,19 @@ export default function ParticlesScreen() {
      * @param {number} atomRadius
      */
     const drawSierpinskiTriangleSetup = (prevAtom, atomsCount, atomRadius) => {
-      const topCenterAtom = createAtom(canvasElem.width / 2, 50, atomRadius);
-      const leftBottomAtom = createAtom(50, canvasElem.height - 50, atomRadius);
+      const topCenterAtom = createAtom(
+        canvasSettings.rect.width / 2,
+        50,
+        atomRadius
+      );
+      const leftBottomAtom = createAtom(
+        50,
+        canvasSettings.rect.height - 50,
+        atomRadius
+      );
       const rightBottomAtom = createAtom(
-        canvasElem.width - 50,
-        canvasElem.height - 50,
+        canvasSettings.rect.width - 50,
+        canvasSettings.rect.height - 50,
         atomRadius
       );
       const triangleCorners = /** @type {const} */ ([
@@ -268,14 +403,19 @@ export default function ParticlesScreen() {
 
     /** @param {PointerEvent} event */
     const handleDrawSierpinskiTriangle = (event) => {
-      resizeCanvas();
+      if (canvasSettings.isResizePending) {
+        handlePendingResizeCanvas();
+      }
+
       ctx.fillStyle = "rgba(0,0,0)";
-      ctx.fillRect(0, 0, canvasElem.width, canvasElem.height);
+      ctx.fillRect(0, 0, canvasSettings.rect.width, canvasSettings.rect.height);
 
       // PROPLEM: Will, it's like still a few pixels different on the x and y
       const firstAtomRadius = 20;
-      const x = (event.clientX - canvasConfig.rect.left) * canvasConfig.scale.x;
-      const y = (event.clientY - canvasConfig.rect.top) * canvasConfig.scale.y;
+      // const x = (event.clientX - canvasSettings.rect.left) * canvasSettings.scale.x;
+      // const y = (event.clientY - canvasSettings.rect.top) * canvasSettings.scale.y;
+      const x = event.clientX - canvasSettings.rect.left;
+      const y = event.clientY - canvasSettings.rect.top;
       const firstAtom = createAtom(x, y, firstAtomRadius);
       drawAtom(firstAtom, ctx);
 
