@@ -21,6 +21,10 @@ export default function Nav() {
       href: "/particles",
       title: "Particles",
     },
+    {
+      href: "/pixel-effect-for-images",
+      title: "Pixel Effect for Images",
+    },
   ];
 
   return (
