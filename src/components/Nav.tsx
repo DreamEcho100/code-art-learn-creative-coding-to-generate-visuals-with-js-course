@@ -29,11 +29,15 @@ export default function Nav() {
 
   return (
     <nav class="bg-sky-800">
-      <ul class="container flex items-center p-3 text-gray-200 gap-1.5">
+      <ul class="container flex items-center p-3 text-gray-200 gap-1.5 sm:gap-6">
         <For each={navItems}>
           {(item) => (
-            <li class={`border-b-2 ${active(item.href)} mx-1.5 sm:mx-6`}>
-              <A href={item.href} rel="noopener">
+            <li>
+              <A
+                href={item.href}
+                rel="noopener"
+                class={`border-b-2 ${active(item.href)}`}
+              >
                 {item.title}
               </A>
             </li>

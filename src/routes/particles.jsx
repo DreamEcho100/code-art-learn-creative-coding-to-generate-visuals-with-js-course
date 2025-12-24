@@ -68,7 +68,8 @@ export default function ParticlesScreen() {
       canvasElem,
       {
         onCleanup,
-        handleDprChange: (dpr) => {
+        onResizeChangeEnd: () => {
+          const dpr = canvasSettings.dpr;
           // ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.scale(dpr, dpr);

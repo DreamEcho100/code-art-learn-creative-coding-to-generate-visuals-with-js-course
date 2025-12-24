@@ -37,27 +37,23 @@ function isElementHidden(elem) {
  * @param {{
  *  IntersectionObserverOptions?: IntersectionObserverInit | undefined
  *  onCleanup: (fn: () => void) => void;
- *  handleDprChange?: (dpr: number) => void;
- *  onVisibilitychange?: (isPaused: boolean) => void;
- *  onResizeChange?: (entry: ResizeObserverEntry) => void;
- *  onIntersectionChange?: (entry: IntersectionObserverEntry, isIntersecting: boolean, isHidden: boolean) => void;
+ *  onResizeChangeEnd?: (dpr: number, canvasSettings: CanvasSettings) => void;
+ *  onVisibilitychange?: (isPaused: boolean, canvasSettings: CanvasSettings) => void;
+ *  onResizeChangeStart?: (entry: ResizeObserverEntry, canvasSettings: CanvasSettings) => void;
+ *  onIntersectionChange?: (entry: IntersectionObserverEntry, isIntersecting: boolean, isHidden: boolean, canvasSettings: CanvasSettings) => void;
  * }} options
  *
  * @example
  *
  * ```js
- * const { canvassettings, handlependingresizecanvas } = initCanvasSettings(
- *   canvaselem,
- *   {
- *     oncleanup,
- *     handledprchange: (dpr) => {
- *       // ctx.settransform(dpr, 0, 0, dpr, 0, 0);
- *       ctx.settransform(1, 0, 0, 1, 0, 0);
- *       ctx.scale(dpr, dpr);
- *     },
- *   }
- * );
+ *  onResizeChangeEnd: () => {
+ *    const dpr = canvasSettings.dpr;
+ *    // ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+ *    ctx.setTransform(1, 0, 0, 1, 0, 0);
+ *    ctx.scale(dpr, dpr);
+ *  },
  * ```
+ * @example
  *
  * ```js
  * if (canvasSettings.isResizePending) {
@@ -69,7 +65,7 @@ export function initCanvasSettings(canvasElem, options) {
   canvasElem.style.setProperty("contain", "layout paint size");
   const handleVisibilitychange = () => {
     canvasSettings.isHidden = isElementHidden(canvasElem);
-    options.onVisibilitychange?.(canvasSettings.isHidden);
+    options.onVisibilitychange?.(canvasSettings.isHidden, canvasSettings);
   };
   document.addEventListener("visibilitychange", handleVisibilitychange);
   canvasElem.addEventListener("visibilitychange", handleVisibilitychange);
@@ -93,7 +89,8 @@ export function initCanvasSettings(canvasElem, options) {
       options.onIntersectionChange?.(
         entry,
         isIntersecting,
-        canvasSettings.isHidden
+        canvasSettings.isHidden,
+        canvasSettings
       );
     },
     {
@@ -111,7 +108,7 @@ export function initCanvasSettings(canvasElem, options) {
   const dpr = window.devicePixelRatio || 1;
   canvasElem.width = Math.round(initRect.width * dpr);
   canvasElem.height = Math.round(initRect.height * dpr);
-  options.handleDprChange?.(dpr);
+  // options.handleDprChange?.(dpr,canvasSettings);
 
   /** @type {CanvasSettings} */
   const canvasSettings = {
@@ -170,7 +167,7 @@ export function initCanvasSettings(canvasElem, options) {
 
     canvasSettings.isResizePending = true;
 
-    options.onResizeChange?.(entry);
+    options.onResizeChangeStart?.(entry, canvasSettings);
   });
   canvasResizeObserver.observe(canvasElem);
   options.onCleanup(() => {
@@ -205,7 +202,7 @@ export function initCanvasSettings(canvasElem, options) {
     canvasElem.width = width;
     canvasElem.height = height;
 
-    options.handleDprChange?.(nextDpr);
+    options.onResizeChangeEnd?.(nextDpr, canvasSettings);
 
     //
     canvasSettings.isResizePending = false;
